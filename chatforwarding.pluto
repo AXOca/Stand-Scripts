@@ -1,0 +1,87 @@
+-- V10
+-- You'll have to reload the script once after you entered the webhook.
+
+
+local sendMessagesEnabled = true
+
+local function simpleJsonEncode(data)
+    local jsonStr = '{'
+    for key, value in pairs(data) do
+        local escapedValue = tostring(value):gsub('"', '\\"')
+        jsonStr = jsonStr .. '"' .. key .. '": "' .. escapedValue .. '",'
+    end
+    jsonStr = jsonStr:sub(1, -2)
+    jsonStr = jsonStr .. '}'
+    return jsonStr
+end
+
+local function sendToDiscord(webhook_url, sender, message)
+    local systemDateTime = os.date("%m/%d/%Y %I:%M:%S %p")
+    
+    local payload = simpleJsonEncode({
+        content = string.format("[%s] %s: %s", systemDateTime, sender, message),
+        username = "Game Chat"
+    })
+    
+    async_http.init(webhook_url, nil, 
+        function(body, header_fields, status_code) -- Y/Callback
+            if status_code ~= 200 and status_code ~= 204 then 
+                util.toast("Message sent, but received status code: " .. tostring(status_code))
+            end
+        end, 
+        function(reason) -- F/Callback
+            util.toast("Failed to send message to Discord: " .. tostring(reason))
+        end
+    )
+    
+    async_http.set_post("application/json", payload)
+    
+    async_http.dispatch()
+end
+
+local function readStoredWebhookURL(file_path)
+    if not filesystem.exists(file_path) then
+        return nil
+    end
+    local f = io.open(file_path, "r")
+    local data = f:read("*a")
+    f:close()
+    return data
+end
+
+local store_dir = filesystem.store_dir()
+filesystem.mkdirs(store_dir)
+local webhook_file_path = store_dir .. "discord_webhook.txt"
+local discord_webhook_url = readStoredWebhookURL(webhook_file_path)
+local menu_root = menu.my_root()
+
+menu.toggle(menu_root, "Toggle Chat Forwarding", {"toggleDiscordSending"}, "Enable/Disable Chat Forwarding", function(on)
+    sendMessagesEnabled = on
+    if on then
+        util.toast("[Forwarding Messages] enabled")
+    else
+        util.toast("[Forwarding Messages] disabled")
+    end
+end, true)
+
+
+if not discord_webhook_url then
+    menu.text_input(menu_root, "Set Discord Webhook", {"setwebhookurl"}, "Enter the Discord webhook URL.", function(input_text)
+        if input_text and #input_text > 0 then
+            local f = io.open(webhook_file_path, "w")
+            f:write(input_text)
+            f:close()
+            discord_webhook_url = input_text
+            util.toast("Webhook URL stored successfully.")
+        else
+            util.toast("Invalid webhook URL.")
+        end
+    end)
+else
+    chat.on_message(function(packet_sender, message_sender, message_text, is_team_chat)
+        if sendMessagesEnabled then
+            local sender_name = players.get_name(packet_sender)
+            sendToDiscord(discord_webhook_url, sender_name, message_text)
+        end
+    end)
+end
