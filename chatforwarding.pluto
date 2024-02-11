@@ -20,7 +20,7 @@ local function sendToDiscord(webhook_url, sender, message)
     
     local payload = simpleJsonEncode({
         content = string.format("[%s] %s: %s", systemDateTime, sender, message),
-        username = "Game Chat"
+        username = "Stand - Ingame Chat"
     })
     
     async_http.init(webhook_url, nil, 
